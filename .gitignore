@@ -1,0 +1,17 @@
+# Python backend
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+server/wardfit.db
+
+# Flutter / Dart client
+client/build/
+client/.dart_tool/
+client/.flutter-plugins
+client/.flutter-plugins-dependencies
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
