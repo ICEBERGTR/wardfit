@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/wardfit_logo.dart';
 
@@ -36,11 +37,22 @@ class _LoadingScreenState extends State<LoadingScreen>
   }
 
   Future<void> _runTransition() async {
-    // Run the backend sync alongside a short minimum splash delay
-    await Future.wait([
-      if (widget.task != null) widget.task!(),
-      Future<void>.delayed(const Duration(milliseconds: 1350)),
-    ]);
+    try {
+      await Future.wait([
+        if (widget.task != null) widget.task!(),
+        Future<void>.delayed(const Duration(milliseconds: 1350)),
+      ]);
+    } on AuthException catch (err) {
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil('/login', (r) => false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(err.message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     if (!mounted) return;
     if (widget.replaceCurrentOnly) {
@@ -159,7 +171,7 @@ class _SmileyCurvedLoadingPainter extends CustomPainter {
     const chars = ['l', 'o', 'a', 'd', 'i', 'n', 'g', '.', '.', '.'];
     final arcCenter = Offset(cx, size.height * 0.16);
     const arcRadius = 158.0;
-    const totalSpread = 0.86; // radians across bottom of circle
+    const totalSpread = 0.86;
     final startAngle = (math.pi / 2) + (totalSpread / 2);
 
     for (int i = 0; i < chars.length; i++) {
@@ -183,7 +195,6 @@ class _SmileyCurvedLoadingPainter extends CustomPainter {
 
       canvas.save();
       canvas.translate(x, y);
-      // Rotate letter tangentially along the bottom curve
       canvas.rotate(angle - math.pi / 2);
       tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
       canvas.restore();

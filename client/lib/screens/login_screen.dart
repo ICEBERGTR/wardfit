@@ -13,29 +13,50 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isSignUpMode = false;
 
   @override
   void dispose() {
     _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  void _handleSignIn() {
+  void _handleSubmit() {
     final wardrobe = WardrobeScope.of(context);
     final rawUser = _usernameController.text.trim();
+    final rawEmail = _emailController.text.trim();
     final pass = _passwordController.text;
 
-    // Transition through Screen 6 (Loading Screen) while syncing closet data
+    if (_isSignUpMode && pass.trim().length < 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a password of at least 4 characters.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final displayUser = rawUser.isEmpty
+        ? wardrobe.username
+        : (rawUser.startsWith('@') ? rawUser : '@$rawUser');
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => LoadingScreen(
-          displayUsername: rawUser.isEmpty
-              ? wardrobe.username
-              : (rawUser.startsWith('@') ? rawUser : '@$rawUser'),
-          task: () => wardrobe.signIn(rawUser, pass),
+          displayUsername: displayUser,
+          task: () => _isSignUpMode
+              ? wardrobe.registerAccount(
+                  rawUsername: rawUser.isEmpty ? '@user' : rawUser,
+                  password: pass,
+                  rawEmail: rawEmail,
+                )
+              : wardrobe.signIn(rawUser, pass),
           nextRouteName: '/main',
         ),
       ),
@@ -48,7 +69,7 @@ class _LoginScreenState extends State<LoginScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Reset Password'),
         content: const Text(
-          'Enter your @username on the login screen and check your registered email for a reset link.',
+          'Demo credentials: @user / wardfit123.\nFor registered accounts, check your email for a reset link.',
         ),
         actions: [
           TextButton(
@@ -60,16 +81,10 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _showSignUpSnackBar() {
-    if (_usernameController.text.trim().isEmpty) {
-      _usernameController.text = '@user';
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Demo account ready! Tap Sign in to continue.'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  void _toggleAuthMode() {
+    setState(() {
+      _isSignUpMode = !_isSignUpMode;
+    });
   }
 
   @override
@@ -118,6 +133,42 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
+
+                if (_isSignUpMode) ...[
+                  const SizedBox(height: 20),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(32),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.025),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      style: const TextStyle(color: AppColors.textDark),
+                      decoration: const InputDecoration(
+                        hintText: 'E-mail Address',
+                        hintStyle: TextStyle(
+                          color: Color(0xFF7D7D7D),
+                          fontSize: 15,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 20),
 
                 // Password field with visibility toggle
@@ -136,7 +187,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: TextField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
-                    onSubmitted: (_) => _handleSignIn(),
+                    onSubmitted: (_) => _handleSubmit(),
                     style: const TextStyle(color: AppColors.textDark),
                     decoration: InputDecoration(
                       hintText: 'Password',
@@ -171,12 +222,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 38),
 
-                // Full-width dark forest green Sign in pill button
+                // Full-width dark forest green Sign in / Sign up pill button
                 SizedBox(
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _handleSignIn,
+                    onPressed: _handleSubmit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryGreen,
                       foregroundColor: Colors.white,
@@ -185,9 +236,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(30),
                       ),
                     ),
-                    child: const Text(
-                      'Sign in',
-                      style: TextStyle(
+                    child: Text(
+                      _isSignUpMode ? 'Sign up' : 'Sign in',
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                       ),
@@ -212,18 +263,20 @@ class _LoginScreenState extends State<LoginScreen> {
                   alignment: WrapAlignment.center,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    const Text(
-                      "Don't have an account?  ",
-                      style: TextStyle(
+                    Text(
+                      _isSignUpMode
+                          ? 'Already have an account?  '
+                          : "Don't have an account?  ",
+                      style: const TextStyle(
                         fontSize: 13.5,
                         color: AppColors.textDark,
                       ),
                     ),
                     GestureDetector(
-                      onTap: _showSignUpSnackBar,
-                      child: const Text(
-                        'Sign up',
-                        style: TextStyle(
+                      onTap: _toggleAuthMode,
+                      child: Text(
+                        _isSignUpMode ? 'Sign in' : 'Sign up',
+                        style: const TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w800,
                           color: AppColors.primaryGreen,

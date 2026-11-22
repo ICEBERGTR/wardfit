@@ -301,7 +301,7 @@ class SettingsScreen extends StatelessWidget {
               InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: () {
-                  state.setTab(0);
+                  state.signOut();
                   Navigator.of(context).pushNamedAndRemoveUntil(
                     '/login',
                     (route) => false,

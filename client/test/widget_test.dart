@@ -3,10 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wardfit/main.dart';
 
 void main() {
-  testWidgets('Full WardFit flow across screens renders without errors', (
+  testWidgets('Full WardFit v1.1 flow across screens renders without errors', (
     tester,
   ) async {
-    // Use generous mobile viewport so wide test-font glyphs fit comfortably
     tester.view.physicalSize = const Size(480, 960);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -14,9 +13,17 @@ void main() {
 
     await tester.pumpWidget(const WardFitApp());
 
-    // Screen 1: Login Screen
+    // Screen 1: Login Screen & v1.1 Sign up mode toggle
     expect(find.text('WARDFIT'), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
+
+    await tester.tap(find.text('Sign up'));
+    await tester.pump();
+    expect(find.text('E-mail Address'), findsOneWidget);
+
+    // Toggle back to Sign in
+    await tester.tap(find.text('Sign in'));
+    await tester.pump();
 
     await tester.enterText(find.byType(TextField).first, '@ayberk');
     await tester.tap(find.text('Sign in'));
@@ -27,7 +34,7 @@ void main() {
     expect(find.text('Hello @ayberk'), findsOneWidget);
     expect(find.text('How are you today?'), findsOneWidget);
 
-    // Advance past 1.35s splash transition to land on Home Dashboard
+    // Advance past splash transition to land on Home Dashboard
     await tester.pump(const Duration(milliseconds: 1500));
     await tester.pumpAndSettle();
 

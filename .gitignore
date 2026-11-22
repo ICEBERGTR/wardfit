@@ -5,6 +5,10 @@ __pycache__/
 venv/
 env/
 server/wardfit.db
+server/uploads/*.png
+server/uploads/*.jpg
+server/uploads/*.jpeg
+!server/uploads/.gitkeep
 
 # Flutter / Dart client
 client/build/

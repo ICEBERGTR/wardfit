@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
@@ -12,6 +14,32 @@ class ClothingIllustration extends StatelessWidget {
     required this.imageKey,
     this.size = 100,
   });
+
+  // Renders the garment painter into a real PNG byte buffer for backend upload
+  static Future<Uint8List?> renderToPngBytes(
+    String imageKey, {
+    int dimension = 240,
+  }) async {
+    try {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      final size = Size(dimension.toDouble(), dimension.toDouble());
+
+      // Light studio backdrop
+      canvas.drawRect(
+        Offset.zero & size,
+        Paint()..color = const Color(0xFFF3F4F3),
+      );
+      _GarmentPainter(imageKey: imageKey).paint(canvas, size);
+
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(dimension, dimension);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      return byteData?.buffer.asUint8List();
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

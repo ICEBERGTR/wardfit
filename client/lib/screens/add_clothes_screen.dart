@@ -1,4 +1,6 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../services/image_picker_helper.dart';
 import '../services/wardrobe_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bottom_nav_shell.dart';
@@ -27,6 +29,7 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
   ];
 
   int _previewIndex = 0;
+  Uint8List? _selectedImageBytes;
   bool _saving = false;
 
   String get _currentImageKey => _previewPresets[_previewIndex];
@@ -39,14 +42,56 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
     super.dispose();
   }
 
-  void _cyclePreview(String sourceLabel) {
+  Future<void> _handleTakePic() async {
+    final nextIdx = (_previewIndex + 1) % _previewPresets.length;
+    final nextKey = _previewPresets[nextIdx];
+    final pngBytes = await ClothingIllustration.renderToPngBytes(nextKey);
+    if (!mounted) return;
+
     setState(() {
+      _previewIndex = nextIdx;
+      _selectedImageBytes = pngBytes;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Photo captured and ready to upload.'),
+        duration: Duration(milliseconds: 1100),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _handleUploadPic() async {
+    final pickedBytes = await pickImageBytesFromDevice();
+    if (!mounted) return;
+
+    if (pickedBytes != null) {
+      setState(() {
+        _selectedImageBytes = pickedBytes;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Image file loaded from device.'),
+          duration: Duration(milliseconds: 1200),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    // Fallback when running on web or if dialog was cancelled
+    await _handleTakePic();
+  }
+
+  void _handleRetakePic() {
+    setState(() {
+      _selectedImageBytes = null;
       _previewIndex = (_previewIndex + 1) % _previewPresets.length;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$sourceLabel: garment preview updated.'),
-        duration: const Duration(milliseconds: 1100),
+      const SnackBar(
+        content: Text('Preview reset.'),
+        duration: Duration(milliseconds: 900),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -66,6 +111,11 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
 
     setState(() => _saving = true);
     final state = WardrobeScope.of(context);
+
+    // Ensure a PNG image buffer is sent so /server/uploads/<uuid>.png is persisted
+    final uploadBytes = _selectedImageBytes ??
+        await ClothingIllustration.renderToPngBytes(_currentImageKey);
+
     final created = await state.addClothes(
       name: name,
       color: _colorController.text.trim().isEmpty
@@ -75,6 +125,7 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
           ? 'casual, everyday'
           : _tagsController.text.trim(),
       imageKey: _currentImageKey,
+      imageBytes: uploadBytes,
     );
 
     if (!mounted) return;
@@ -82,7 +133,9 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Added "${created.name}" (${created.category}) to My Clothes!'),
+        content: Text(
+          'Added "${created.name}" (${created.category}) to My Clothes!',
+        ),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -150,13 +203,13 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
                   _PhotoActionButton(
                     icon: Icons.camera_alt_outlined,
                     label: 'Take a pic',
-                    onTap: () => _cyclePreview('Camera capture'),
+                    onTap: _handleTakePic,
                   ),
                   const SizedBox(width: 26),
                   _PhotoActionButton(
                     icon: Icons.upload_rounded,
                     label: 'Upload a pic',
-                    onTap: () => _cyclePreview('Gallery upload'),
+                    onTap: _handleUploadPic,
                   ),
                 ],
               ),
@@ -173,14 +226,22 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
                   children: [
                     Expanded(
                       child: Center(
-                        child: ClothingIllustration(
-                          imageKey: _currentImageKey,
-                          size: 165,
-                        ),
+                        child: _selectedImageBytes != null
+                            ? Padding(
+                                padding: const EdgeInsets.all(10),
+                                child: Image.memory(
+                                  _selectedImageBytes!,
+                                  fit: BoxFit.contain,
+                                ),
+                              )
+                            : ClothingIllustration(
+                                imageKey: _currentImageKey,
+                                size: 165,
+                              ),
                       ),
                     ),
                     GestureDetector(
-                      onTap: () => _cyclePreview('Retake photo'),
+                      onTap: _handleRetakePic,
                       child: Container(
                         width: double.infinity,
                         height: 30,

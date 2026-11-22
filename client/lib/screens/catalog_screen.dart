@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/clothing_item.dart';
+import '../services/api_service.dart';
 import '../services/wardrobe_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bottom_nav_shell.dart';
@@ -51,7 +52,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
   Widget build(BuildContext context) {
     final state = WardrobeScope.of(context);
 
-    // Order sections with Outwear and Pants first just like Screen 7 design
     final visibleSections = _selectedCategory == 'See All'
         ? const ['Outwear', 'Pants', 'Shirts', 'Shoes']
         : [_selectedCategory];
@@ -281,6 +281,40 @@ class _CatalogItemCard extends StatelessWidget {
     required this.onFavoriteToggle,
   });
 
+  Widget _buildItemVisual() {
+    if (item.localImageBytes != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.memory(
+          item.localImageBytes!,
+          width: 94,
+          height: 94,
+          fit: BoxFit.contain,
+        ),
+      );
+    }
+    if (item.imageUrl != null && item.imageUrl!.trim().isNotEmpty) {
+      final resolved = ApiService.resolveImageUrl(item.imageUrl);
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.network(
+          resolved,
+          width: 94,
+          height: 94,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => ClothingIllustration(
+            imageKey: item.imageKey,
+            size: 94,
+          ),
+        ),
+      );
+    }
+    return ClothingIllustration(
+      imageKey: item.imageKey,
+      size: 94,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -304,10 +338,7 @@ class _CatalogItemCard extends StatelessWidget {
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.all(8),
-                    child: ClothingIllustration(
-                      imageKey: item.imageKey,
-                      size: 94,
-                    ),
+                    child: _buildItemVisual(),
                   ),
                 ),
                 Positioned(

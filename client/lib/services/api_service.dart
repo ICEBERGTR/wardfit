@@ -7,47 +7,203 @@ import '../models/clothing_item.dart';
 import '../models/outfit_recommendation.dart';
 import 'mock_data.dart';
 
+class AuthException implements Exception {
+  final String message;
+  const AuthException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 class ApiService {
-  // Android emulator maps host localhost to 10.0.2.2
-  static String get baseUrl {
+  static String get serverOrigin {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:8000/api';
+      return 'http://10.0.2.2:8000';
     }
-    return 'http://127.0.0.1:8000/api';
+    return 'http://127.0.0.1:8000';
   }
 
-  static const Duration _timeout = Duration(milliseconds: 1800);
+  static String get baseUrl => '$serverOrigin/api';
 
-  Future<String> login(String username, String password) async {
-    final formatted = username.trim().isEmpty
-        ? '@user'
-        : (username.trim().startsWith('@')
-            ? username.trim()
-            : '@${username.trim()}');
+  static String resolveImageUrl(String? rawUrl) {
+    if (rawUrl == null || rawUrl.trim().isEmpty) return '';
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      return rawUrl;
+    }
+    return '$serverOrigin$rawUrl';
+  }
+
+  static const Duration _timeout = Duration(milliseconds: 2200);
+
+  String? _authToken;
+  String? get authToken => _authToken;
+
+  void setToken(String? token) {
+    _authToken = token;
+  }
+
+  Map<String, String> _headers({bool jsonContent = true}) {
+    final headers = <String, String>{};
+    if (jsonContent) {
+      headers['Content-Type'] = 'application/json';
+    }
+    if (_authToken != null && _authToken!.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $_authToken';
+    }
+    return headers;
+  }
+
+  String _formatUsername(String username) {
+    final trimmed = username.trim();
+    if (trimmed.isEmpty) return '@user';
+    return trimmed.startsWith('@') ? trimmed : '@$trimmed';
+  }
+
+  Future<Map<String, dynamic>> register({
+    required String username,
+    required String password,
+    String? email,
+  }) async {
+    final formatted = _formatUsername(username);
+    final cleanEmail = (email == null || email.trim().isEmpty)
+        ? 'hello@reallygreatsite.com'
+        : email.trim();
+
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$baseUrl/auth/register'),
+            headers: _headers(),
+            body: jsonEncode({
+              'username': formatted,
+              'password': password,
+              'email': cleanEmail,
+            }),
+          )
+          .timeout(_timeout);
+
+      if (res.statusCode == 201 || res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        _authToken = data['token'] as String?;
+        return data;
+      }
+
+      if (res.body.isNotEmpty) {
+        final err = jsonDecode(res.body) as Map<String, dynamic>;
+        throw AuthException(err['detail']?.toString() ?? 'Registration failed.');
+      }
+    } on AuthException {
+      rethrow;
+    } catch (_) {
+      // Offline fallback when backend server is not running
+    }
+
+    _authToken = 'offline-demo-jwt-token';
+    return {
+      'token': _authToken,
+      'username': formatted,
+      'email': cleanEmail,
+      'phone': '+123-456-7890',
+      'address': '123 Anywhere St., Any City, ST 12345',
+    };
+  }
+
+  Future<Map<String, dynamic>> login(String username, String password) async {
+    final formatted = _formatUsername(username);
 
     try {
       final res = await http
           .post(
             Uri.parse('$baseUrl/auth/login'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _headers(),
             body: jsonEncode({'username': formatted, 'password': password}),
           )
           .timeout(_timeout);
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        return data['username'] as String? ?? formatted;
+        _authToken = data['token'] as String?;
+        return data;
       }
+
+      if (res.statusCode == 401 && res.body.isNotEmpty) {
+        final err = jsonDecode(res.body) as Map<String, dynamic>;
+        throw AuthException(err['detail']?.toString() ?? 'Invalid credentials.');
+      }
+    } on AuthException {
+      rethrow;
     } catch (_) {
       // Fall back to local login if Python server isn't running
     }
-    return formatted;
+
+    _authToken = 'offline-demo-jwt-token';
+    return {
+      'token': _authToken,
+      'username': formatted,
+      'email': 'hello@reallygreatsite.com',
+      'phone': '+123-456-7890',
+      'address': '123 Anywhere St., Any City, ST 12345',
+    };
+  }
+
+  Future<Map<String, dynamic>?> fetchCurrentUser() async {
+    if (_authToken == null) return null;
+    try {
+      final res = await http
+          .get(Uri.parse('$baseUrl/auth/me'), headers: _headers())
+          .timeout(_timeout);
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> updateProfile({
+    String? username,
+    String? email,
+    String? phone,
+    String? address,
+  }) async {
+    try {
+      final res = await http
+          .patch(
+            Uri.parse('$baseUrl/auth/me'),
+            headers: _headers(),
+            body: jsonEncode({
+              'username': ?username,
+              'email': ?email,
+              'phone': ?phone,
+              'address': ?address,
+            }),
+          )
+          .timeout(_timeout);
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<String?> fetchLiveWeather({bool refresh = false}) async {
+    try {
+      final uri = Uri.parse('$baseUrl/weather').replace(
+        queryParameters: {'refresh': refresh.toString()},
+      );
+      final res = await http.get(uri, headers: _headers()).timeout(_timeout);
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return data['label'] as String?;
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<List<ClothingItem>> fetchClothes() async {
     try {
-      final res =
-          await http.get(Uri.parse('$baseUrl/clothes')).timeout(_timeout);
+      final res = await http
+          .get(Uri.parse('$baseUrl/clothes'), headers: _headers())
+          .timeout(_timeout);
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         final rawList = data['items'] as List<dynamic>? ?? [];
@@ -66,28 +222,32 @@ class ApiService {
     required String color,
     required String tags,
     required String imageKey,
+    Uint8List? imageBytes,
     required int fallbackId,
   }) async {
     try {
       final res = await http
           .post(
             Uri.parse('$baseUrl/clothes'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _headers(),
             body: jsonEncode({
               'name': name,
               'color': color,
               'tags': tags,
               'image_key': imageKey,
+              if (imageBytes != null) 'image_base64': base64Encode(imageBytes),
             }),
           )
           .timeout(_timeout);
 
       if (res.statusCode == 201 || res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        return ClothingItem.fromJson(data);
+        return ClothingItem.fromJson(data).copyWith(
+          localImageBytes: imageBytes,
+        );
       }
     } catch (_) {
-      // Fall through to local item creation
+      // Fall through to local item creation when offline
     }
 
     return ClothingItem(
@@ -97,6 +257,7 @@ class ApiService {
       color: color,
       tags: tags,
       imageKey: imageKey,
+      localImageBytes: imageBytes,
       isFavorite: false,
     );
   }
@@ -104,11 +265,15 @@ class ApiService {
   Future<ClothingItem?> toggleFavorite(int itemId) async {
     try {
       final res = await http
-          .patch(Uri.parse('$baseUrl/clothes/$itemId/favorite'))
+          .patch(
+            Uri.parse('$baseUrl/clothes/$itemId/favorite'),
+            headers: _headers(),
+          )
           .timeout(_timeout);
       if (res.statusCode == 200) {
         return ClothingItem.fromJson(
-            jsonDecode(res.body) as Map<String, dynamic>);
+          jsonDecode(res.body) as Map<String, dynamic>,
+        );
       }
     } catch (_) {
       // Handled optimistically in state
@@ -117,29 +282,34 @@ class ApiService {
   }
 
   Future<OutfitRecommendation> fetchRecommendations({
-    required String weather,
+    String? weatherOverride,
     required String plan,
     required String stylePref,
     required int localClothCount,
   }) async {
     try {
+      final queryParams = <String, String>{
+        'plan': plan,
+        'style_pref': stylePref,
+      };
+      if (weatherOverride != null && weatherOverride.trim().isNotEmpty) {
+        queryParams['weather'] = weatherOverride;
+      }
+
       final uri = Uri.parse('$baseUrl/recommendations').replace(
-        queryParameters: {
-          'weather': weather,
-          'plan': plan,
-          'style_pref': stylePref,
-        },
+        queryParameters: queryParams,
       );
-      final res = await http.get(uri).timeout(_timeout);
+      final res = await http.get(uri, headers: _headers()).timeout(_timeout);
       if (res.statusCode == 200) {
         return OutfitRecommendation.fromJson(
-            jsonDecode(res.body) as Map<String, dynamic>);
+          jsonDecode(res.body) as Map<String, dynamic>,
+        );
       }
     } catch (_) {
       // Offline recommendation fallback
     }
     return MockData.buildOfflineRecommendation(
-      weather: weather,
+      weather: weatherOverride ?? 'Rainy 6°C',
       plan: plan,
       stylePref: stylePref,
       clothCount: localClothCount,
@@ -148,11 +318,13 @@ class ApiService {
 
   Future<WardrobeAnalytics> fetchAnalytics() async {
     try {
-      final res =
-          await http.get(Uri.parse('$baseUrl/analytics')).timeout(_timeout);
+      final res = await http
+          .get(Uri.parse('$baseUrl/analytics'), headers: _headers())
+          .timeout(_timeout);
       if (res.statusCode == 200) {
         return WardrobeAnalytics.fromJson(
-            jsonDecode(res.body) as Map<String, dynamic>);
+          jsonDecode(res.body) as Map<String, dynamic>,
+        );
       }
     } catch (_) {
       // Offline analytics fallback
@@ -165,7 +337,7 @@ class ApiService {
       final res = await http
           .post(
             Uri.parse('$baseUrl/chat'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _headers(),
             body: jsonEncode({'message': message, 'weather': weather}),
           )
           .timeout(_timeout);

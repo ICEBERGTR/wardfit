@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 class ClothingItem {
   final int id;
   final String name;
@@ -5,6 +7,8 @@ class ClothingItem {
   final String color;
   final String tags;
   final String imageKey;
+  final String? imageUrl; // Relative path from backend e.g. /uploads/<uuid>.png
+  final Uint8List? localImageBytes;
   final bool isFavorite;
 
   const ClothingItem({
@@ -14,6 +18,8 @@ class ClothingItem {
     required this.color,
     required this.tags,
     required this.imageKey,
+    this.imageUrl,
+    this.localImageBytes,
     this.isFavorite = false,
   });
 
@@ -24,6 +30,8 @@ class ClothingItem {
     String? color,
     String? tags,
     String? imageKey,
+    String? imageUrl,
+    Uint8List? localImageBytes,
     bool? isFavorite,
   }) {
     return ClothingItem(
@@ -33,6 +41,8 @@ class ClothingItem {
       color: color ?? this.color,
       tags: tags ?? this.tags,
       imageKey: imageKey ?? this.imageKey,
+      imageUrl: imageUrl ?? this.imageUrl,
+      localImageBytes: localImageBytes ?? this.localImageBytes,
       isFavorite: isFavorite ?? this.isFavorite,
     );
   }
@@ -45,6 +55,7 @@ class ClothingItem {
       color: json['color'] as String? ?? '',
       tags: json['tags'] as String? ?? '',
       imageKey: json['image_key'] as String? ?? 'grey_jacket',
+      imageUrl: json['image_url'] as String?,
       isFavorite: json['is_favorite'] == true || json['is_favorite'] == 1,
     );
   }
@@ -57,6 +68,7 @@ class ClothingItem {
       'color': color,
       'tags': tags,
       'image_key': imageKey,
+      'image_url': imageUrl,
       'is_favorite': isFavorite,
     };
   }
